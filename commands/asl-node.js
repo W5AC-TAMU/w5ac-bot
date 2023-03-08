@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, parseResponse } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder} = require('discord.js');
 const { table } = require('table');
 const signale = require('signale');
 
@@ -8,6 +8,7 @@ signale.config({displayTimestamp: true, displayDate: true});
 // Replies with stats for allstar node or table of linkes used by the node
 
 module.exports = {
+    // Slash command builder add subcommands and options, see command previews, and autogenerate new endpoints and code to easily handle incoming events
     data: new SlashCommandBuilder()
 		.setName('allstar')
 		.setDescription('Fetches information for ASL node')

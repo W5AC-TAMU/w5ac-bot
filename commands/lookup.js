@@ -70,6 +70,7 @@ module.exports = {
                     break;
             }
 
+
             let embed = new EmbedBuilder()
                 .setColor(0x500000)
                 .setTitle(`Record for ${get.hamdb.callsign.call}`)

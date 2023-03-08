@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, Events, AttachmentBuilder, EmbedBuilder, RoleSelectMenuBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder} = require('discord.js');
 const signale = require('signale');
 
 signale.config({displayTimestamp: true, displayDate: true});
@@ -12,7 +12,6 @@ module.exports = {
     init: function(client, config) {
         this.client = client;
         this.configFile = config;
-        // this.roleMessage();
     },
     roleMessage: async function() {
         try {
