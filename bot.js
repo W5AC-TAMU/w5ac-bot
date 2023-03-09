@@ -8,6 +8,8 @@ const {Client, Events, GatewayIntentBits, REST, Routes, EmbedBuilder, Collection
 // Scheduled scripts
 const examQuestion = require('./scheduled_scripts/exam-question');
 const roles = require('./scheduled_scripts/roles');
+const repeaterAudio = require('./scheduled_scripts/repeater-audio');
+const { config } = require('node:process');
 
 // Config
 var configFile;
@@ -41,6 +43,7 @@ client.on('ready', () => {
 	signale.success(`Logged in as ${client.user.tag}`)
 	examQuestion.init(client, configFile);
 	roles.init(client, configFile);
+	repeaterAudio.init(client, configFile);
 });
 
 // Runs on command, button press, or other interaction
