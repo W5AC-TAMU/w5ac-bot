@@ -8,7 +8,7 @@ signale.config({displayTimestamp: true, displayDate: true});
 // If not in a guild, replies to user explaining they are not in a guild.
 
 module.exports = {
-    data: new SlashCommandBuilder()
+	data: new SlashCommandBuilder()
 		.setName('server')
 		.setDescription('Provides information about the server.'),
 	async execute(interaction) {

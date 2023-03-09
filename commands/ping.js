@@ -7,7 +7,7 @@ signale.config({displayTimestamp: true, displayDate: true});
 // Replies with ping information then updates with roundtrip time.
 
 module.exports = {
-    data: new SlashCommandBuilder()
+	data: new SlashCommandBuilder()
 		.setName('ping')
 		.setDescription('Replies with Pong!'),
 	async execute(interaction) {
