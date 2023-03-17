@@ -3,9 +3,9 @@ const signale = require('signale');
 
 signale.config({displayTimestamp: true, displayDate: true});
 
-// /server
-// Replies information about the server the command was in.
-// If not in a guild, replies to user explaining they are not in a guild.
+// /help
+// Prints help message detailing all commands.
+// TODO: Add help for individual commands
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -36,11 +36,46 @@ module.exports = {
 					'options': [
 						{
 							'name': 'user',
-							'value': 'User',
+							'value': 'User (default is person who ran command)',
 							'required': false
 						}
 					]
-
+				},
+				{
+					'command': 'help',
+					'description': 'Displays this help mesasge',
+					'options': []
+				},
+				{
+					'comamnd': 'lookup',
+					'description': 'Lookup callsign using HamDB',
+					'options': [
+						{
+							'name': 'call',
+							'value': 'callsgin',
+							'required': true
+						},
+						{
+							'name': 'verbose',
+							'value': 'boolean (default is false)',
+							'required': false
+						}
+					]
+				},
+				{
+					'command': 'ping',
+					'description': 'Provides discord ping information to the user',
+					'options': []
+				},
+				{
+					'command': 'server',
+					'description': 'Provides information about the server if run in a server',
+					'options': []
+				},
+				{
+					'command': 'user',
+					'description': 'Provides information about the user who ran the command',
+					'options': []
 				}
 			]
 		} catch(error) {
