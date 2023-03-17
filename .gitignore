@@ -3,12 +3,13 @@
 .DS_Store
 bot.log
 keep-alive.sh
+/.idea
 
 # Secrests
 /secrets.json
 /secrets.txt
 /secrets_5XB.json
-/secrests_W5AC.json
+/secrets_W5AC.json
 /resources/exams/questions.json
 /resources/exams/answers.json
 
