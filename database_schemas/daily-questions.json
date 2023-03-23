@@ -1,17 +1,15 @@
 {
 	"_id": 12345,
+	"question_id": 0,
 	"exam_records": [
 		{
 			"_id": 12345,
-			"question_tech": "T7D02",
-			"question_general": "G5C16",
-			"question_extra": "E9G07",
 			"answers": [
 				{
 					"_id": 12345,
-					"answer_tech": "a",
-					"answer_general": "b",
-					"answer_extra": "c"
+					"answer_tech": 0,
+					"answer_general": 1,
+					"answer_extra": 2
 				}
 			]
 		}
