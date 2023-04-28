@@ -21,7 +21,6 @@ try {
 // Discord client
 const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers]});
 
-
 // Load Discord commands from .js files in commands directory
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
@@ -40,7 +39,7 @@ for (const file of commandFiles) {
 // Run when bot is logged in
 client.on('ready', () => {
 	signale.success(`Logged in as ${client.user.tag}`)
-	examQuestion.init(client, configFile);
+	examQuestion.init(client);
 	roles.init(client, configFile);
 });
 
