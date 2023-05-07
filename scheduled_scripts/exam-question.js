@@ -431,9 +431,11 @@ module.exports = {
 					}
 				}
 				const question = await Question.findById(questionID).exec();
+				console.dir(interaction.user.id);
 
-				var playerRecord = player[0].exam_records.find((player) => player._id === String(interaction.user.id));
-				console.dir(playerRecord, {depth: null});
+				var playerRecord = player[0].exam_records.filter(player => player._id === interaction.user.id);
+				console.log("This is what I am looking at");
+				console.dir(playerRecord[0].exam_records);
 			} else {
 				// New player
 				const answerIndex = ['a', 'b', 'c', 'd'].indexOf(interaction.customId.split('-')[3]);
@@ -449,7 +451,6 @@ module.exports = {
 				const question = await Question.findById(questionID).exec();
 
 				const guild = await Exam.findById(interaction.guild.id).exec();
-				console.dir({'_id': interaction.user.id, 'answers': [{'_id': interaction.message.id, 'answer': answerIndex, 'correct': answerIndex == question.correct}]});
 				guild.exam_records.push({'_id': interaction.user.id, 'answers': [{'_id': interaction.message.id, 'answer': answerIndex, 'correct': answerIndex == question.correct}]})
 				guild.save();
 				await interaction.followUp({ content: `Answer ${['A', 'B', 'C', 'D'].at(answerIndex)} recorded for question ${questionID}`, ephemeral: true });
