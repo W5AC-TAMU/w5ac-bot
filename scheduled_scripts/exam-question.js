@@ -21,27 +21,28 @@ const configSchema = new mongoose.Schema({
 })
 const Config = mongoose.model('Guild-Config', configSchema);
 
-const examSchema = new mongoose.Schema({
+const answerSchema = new mongoose.Schema({
+	'_id': String,
+	'question': String,
+	'answer': Number,
+	'correct': Boolean
+})
+
+const playerSchema = new mongoose.Schema({
+	'_id': String,
+	'record_old': Map,
+	'answers': [answerSchema]
+})
+
+const guildSchema = new mongoose.Schema({
 	'_id': String,
 	'question_id': String,
 	'id_tech': String,
 	'id_general': String,
 	'id_extra': String,
-	'exam_records': [
-		{
-			'_id': String,
-			'record_old': Map,
-			'answers': [
-				{
-					'_id': String,
-					'answer': Number,
-					'correct': Boolean
-				}
-			]
-		}
-	]
+	'exam_records': [playerSchema]
 })
-const Exam = mongoose.model('Exam-Daily-Question', examSchema);
+const Exam = mongoose.model('Exam-Daily-Question', guildSchema);
 
 const questionSchema = new mongoose.Schema({
 	'_id': String,
@@ -67,7 +68,7 @@ module.exports = {
 	},
 	// Post questions
 	questions: async function() {
-		const schedule = new CronJob('0 * * * * *', async function() {
+		const schedule = new CronJob('0 */5 * * * *', async function() {
 			try {
 				// Execute the daily questions for every guild
 				module.exports.client.guilds.cache.forEach(async guild => {
@@ -417,8 +418,9 @@ module.exports = {
 	answers: async function(interaction) {
 		try {
 			await interaction.deferReply({ ephemeral: true });
-			const player = await Exam.find({'_id': interaction.guild.id, 'exam_records._id': interaction.user.id}).exec();
-			if(player.length != 0) {
+
+			var interactionGuild = await Exam.find({'_id': interaction.guild.id, 'exam_records._id': interaction.user.id}).exec();
+			if(interactionGuild.length != 0) {
 				// Handle player with previous answers
 				const answerIndex = ['a', 'b', 'c', 'd'].indexOf(interaction.customId.split('-')[3]);
 
@@ -431,11 +433,18 @@ module.exports = {
 					}
 				}
 				const question = await Question.findById(questionID).exec();
-				console.dir(interaction.user.id);
 
-				var playerRecord = player[0].exam_records.filter(player => player._id === interaction.user.id);
-				console.log("This is what I am looking at");
-				console.dir(playerRecord[0].exam_records);
+				var playerRecord = interactionGuild[0].exam_records.id(interaction.user.id);
+				var playerAnswer = playerRecord.answers.id(interaction.message.id);
+				if(playerAnswer != null) {
+					playerAnswer.answer = answerIndex;
+					playerAnswer.correct = answerIndex == question.correct;
+				} else {
+					playerRecord.answers.push({'_id': interaction.message.id, 'question': questionID, 'answer': answerIndex, 'correct': answerIndex == question.correct})
+				}
+				interactionGuild[0].markModified('exam_records');
+				interactionGuild[0].save();
+				await interaction.followUp({ content: `Answer ${['A', 'B', 'C', 'D'].at(answerIndex)} recorded for question [${questionID}]`, ephemeral: true });
 			} else {
 				// New player
 				const answerIndex = ['a', 'b', 'c', 'd'].indexOf(interaction.customId.split('-')[3]);
@@ -451,9 +460,9 @@ module.exports = {
 				const question = await Question.findById(questionID).exec();
 
 				const guild = await Exam.findById(interaction.guild.id).exec();
-				guild.exam_records.push({'_id': interaction.user.id, 'answers': [{'_id': interaction.message.id, 'answer': answerIndex, 'correct': answerIndex == question.correct}]})
+				guild.exam_records.push({'_id': interaction.user.id, 'answers': [{'_id': interaction.message.id, 'question': questionID, 'answer': answerIndex, 'correct': answerIndex == question.correct}]})
 				guild.save();
-				await interaction.followUp({ content: `Answer ${['A', 'B', 'C', 'D'].at(answerIndex)} recorded for question ${questionID}`, ephemeral: true });
+				await interaction.followUp({ content: `Answer ${['A', 'B', 'C', 'D'].at(answerIndex)} recorded for question [${questionID}]`, ephemeral: true });
 			}
 		} catch(error) {
 			signale.error(error);
