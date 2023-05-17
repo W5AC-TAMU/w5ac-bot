@@ -3,67 +3,18 @@ const CronJob = require('cron').CronJob;
 const fs = require('node:fs');
 const signale = require('signale');
 const mongoose = require('mongoose');
+const { Config, Exam, Question} = require('../schema')
 
 signale.config({displayTimestamp: true, displayDate: true});
 
 // License exam questions bot
 // Posts daily license questions in channel configured by config file and updates answer file based on button reactions
 
-const configSchema = new mongoose.Schema({
-	'_id': String,
-	'channels': {
-		'logs': String,
-		'role': String,
-		'daily_question': String,
-		'audio_stream': String
-	},
-	'audio_stream_url': String
-})
-const Config = mongoose.model('Guild-Config', configSchema);
-
-const answerSchema = new mongoose.Schema({
-	'_id': String,
-	'question': String,
-	'answer': Number,
-	'correct': Boolean
-})
-
-const playerSchema = new mongoose.Schema({
-	'_id': String,
-	'record_old': Map,
-	'answers': [answerSchema]
-})
-
-const guildSchema = new mongoose.Schema({
-	'_id': String,
-	'question_id': String,
-	'id_tech': String,
-	'id_general': String,
-	'id_extra': String,
-	'exam_records': [playerSchema]
-})
-const Exam = mongoose.model('Exam-Daily-Question', guildSchema);
-
-const questionSchema = new mongoose.Schema({
-	'_id': String,
-	'correct': Number,
-	'question': String,
-	'answers': {
-		0: String,
-		1: String,
-		2: String,
-		3: String
-	}
-})
-const Question = mongoose.model('FCC-Question', questionSchema);
-
-
 module.exports = {
 	client: null,
-	db: null,
 	init: function(client) {
 		this.client = client;
-		this.db = mongoose.connect('mongodb://127.0.0.1:27017/w5ac-bot');
+		mongoose.connect('mongodb://127.0.0.1:27017/w5ac-bot');
 		this.questions();
 	},
 	// Post questions
