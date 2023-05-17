@@ -21,7 +21,10 @@ const answerSchema = new mongoose.Schema({
 
 const playerSchema = new mongoose.Schema({
 	'_id': String,
-	'record_old': Map,
+	'record_old': {
+		type: Map,
+		of: Number
+	},
 	'answers': [answerSchema]
 })
 

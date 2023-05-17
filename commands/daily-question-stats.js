@@ -23,6 +23,7 @@ module.exports = {
 			if(interaction.guild != null) {
 				var guildRecord = await Exam.findById(interaction.guild.id).exec();
 				var guildPlayerRecord = guildRecord.exam_records.id(interaction.user.id).answers;
+				var guildPlayerRecordOld = guildRecord.exam_records.id(interaction.user.id).record_old;
 
 				let guildTechCorrect = 0;
 				let guildTechAnswered = 0;
@@ -55,6 +56,17 @@ module.exports = {
 							signale.error(`Unknown question ${guildPlayerRecord[i].question}`);
 							break;
 					}
+				}
+
+				try {
+					guildTechCorrect += guildPlayerRecordOld.get('techCorrect');
+					guildTechAnswered += guildPlayerRecordOld.get('techAnswered');
+					guildGeneralCorrect += guildPlayerRecordOld.get('generalCorrect');
+					guildGeneralAnswered += guildPlayerRecordOld.get('generalAnswered');
+					guildExtraCorrect += guildPlayerRecordOld.get('extraCorrect');
+					guildExtraAnswered += guildPlayerRecordOld.get('extraAnswered');
+				} catch(error) {
+					signale.debug("Guild doesn't have old records");
 				}
 
 				let totalCorrect = guildTechCorrect + guildGeneralCorrect + guildExtraCorrect;
