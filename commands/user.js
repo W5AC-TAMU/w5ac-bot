@@ -17,4 +17,15 @@ module.exports = {
 			signale.error(error);
 		}
 	},
+	async execute(interaction) {
+		try {
+			if(interaction.guild != null) {
+				await interaction.reply(`This command was run by ${interaction.user.username}, who joined on ${interaction.member.joinedAt}.`);
+			} else {
+				await interaction.reply(`This command was run by ${interaction.user.username}.`);
+			}
+		} catch(error) {
+			signale.error(error);
+		}
+	},
 };

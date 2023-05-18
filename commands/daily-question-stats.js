@@ -1,6 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder} = require('discord.js');
 const fs = require('node:fs');
 const signale = require('signale');
+const mongoose = require('mongoose');
+const { Config, Exam, Question} = require('../schema')
 
 signale.config({displayTimestamp: true, displayDate: true});
 
@@ -15,90 +17,89 @@ module.exports = {
 			option.setName('user')
 			.setDescription('The user to find stats for')),
 	async execute(interaction) {
-		// Load answers file and find index of current user
-		var answers;
-		var playerIndex;
 		try {
 			await interaction.deferReply();
-			answers = JSON.parse(fs.readFileSync('./resources/exams/answers.json', 'utf8'));
+			mongoose.connect('mongodb://127.0.0.1:27017/w5ac-bot');
 			var userId = interaction.options?.getUser('user')?.id ?? interaction.user.id;
+			if(interaction.guild != null) {
+				var guildRecord = await Exam.findById(interaction.guild.id).exec();
+				if(guildRecord.exam_records.id(userId) == null) {
+					interaction.followUp(`<@${userId}> has not answered any questions.`);
+					return;
+				}
+				var guildPlayerRecord = guildRecord.exam_records.id(userId).answers;
+				var guildPlayerRecordOld = guildRecord.exam_records.id(userId).record_old;
 
-			playerIndex = -1;
-			for(var i = 0; i < answers.length; i++) {
-				if(answers[i].id === String(userId)) {
-					playerIndex = i;
-					break;
+				let guildTechCorrect = 0;
+				let guildTechAnswered = 0;
+				let guildGeneralCorrect = 0;
+				let guildGeneralAnswered = 0;
+				let guildExtraCorrect = 0;
+				let guildExtraAnswered = 0;
+
+				if(guildPlayerRecord.length == 0) {
+					interaction.followUp(`<@${userId}> has not answered any questions.`);
+					return;
 				}
-			}
-		} catch(error) {
-			signale.error(error);
-		}
-		
-		// If player is not found, print a message and gracefully return
-		if(playerIndex === -1) {
-			try {
-				await interaction.followUp('User not found in answers.');
-				signale.debug('Couldn\'t find user');
-				return;
-			} catch(error) {
-				signale.error(error);
-			}
-		} else {
-			try {
-				// Update nickname to be guild nickname instead of global nickname
-				// Current migration away from old standard
-				if(answers[i].nickname != interaction.guild.members.cache.find(member => member.id === interaction.user.id).displayName) {
-					answers[i].nickname = interaction.guild.members.cache.find(member => member.id === interaction.user.id).displayName;
-				}
-				
-				var playerAnswers = answers[playerIndex].answers;
-				var answeredTech = 0;
-				var answeredGeneral = 0;
-				var answeredExtra = 0;
-				var correctTech = 0;
-				var correctGeneral = 0;
-				var correctExtra = 0;
-				// For every answered question, check which pool it came from and update the totals if it is correct or not
-				for(var i = 0; i < playerAnswers.length; i++) {
-					switch(playerAnswers[i].pool) {
-						case 'tech':
-							if(playerAnswers[i].answer === playerAnswers[i].answerCorrect) {
-								correctTech++;
+
+				for(var i = 0; i < guildPlayerRecord.length; i++) {
+					switch(guildPlayerRecord[i].question[0]) {
+						case 'T':
+							if(guildPlayerRecord[i].correct) {
+								guildTechCorrect++;
 							}
-							answeredTech++;
+							guildTechAnswered++;
 							break;
-						case 'general':
-							if(playerAnswers[i].answer === playerAnswers[i].answerCorrect) {
-								correctGeneral++;
+						case 'G':
+							if(guildPlayerRecord[i].correct) {
+								guildGeneralCorrect++;
 							}
-							answeredGeneral++;
+							guildGeneralAnswered++;
 							break;
-						case 'extra':
-							if(playerAnswers[i].answer === playerAnswers[i].answerCorrect) {
-								correctExtra++;
+						case 'E':
+							if(guildPlayerRecord[i].correct) {
+								guildExtraCorrect++;
 							}
-							answeredExtra++;
+							guildExtraAnswered++;
 							break;
 						default:
+							signale.error(`Unknown question ${guildPlayerRecord[i].question}`);
 							break;
 					}
 				}
 
-				// Build stats embed with nickname, total stats, and stats for each exam pool
+				try {
+					guildTechCorrect += guildPlayerRecordOld.get('techCorrect');
+					guildTechAnswered += guildPlayerRecordOld.get('techAnswered');
+					guildGeneralCorrect += guildPlayerRecordOld.get('generalCorrect');
+					guildGeneralAnswered += guildPlayerRecordOld.get('generalAnswered');
+					guildExtraCorrect += guildPlayerRecordOld.get('extraCorrect');
+					guildExtraAnswered += guildPlayerRecordOld.get('extraAnswered');
+				} catch(error) {
+					signale.debug("Guild doesn't have old records");
+				}
+
+				let totalCorrect = guildTechCorrect + guildGeneralCorrect + guildExtraCorrect;
+				let totalAnswered = guildTechAnswered + guildGeneralAnswered + guildExtraAnswered;
+
 				const embed = new EmbedBuilder()
 					.setColor(0x500000)
 					.setTitle(`Statistics for ${interaction.guild.members.cache.find(member => member.id === userId).displayName}`)
-					.setDescription(`Total: ${correctTech + correctGeneral + correctExtra}/${answeredTech + answeredGeneral + answeredExtra}\t${Math.round(((correctTech + correctGeneral + correctExtra)/(answeredTech + answeredGeneral + answeredExtra))*10000)/100}%`)
+					.setDescription(`Total: ${totalCorrect}/${totalAnswered}\t${Math.round((totalCorrect/totalAnswered)*10000)/100}%`)
 					.addFields(
-						{ name: 'Technician: ', value: `${correctTech}/${answeredTech}\t${Math.round((correctTech/answeredTech)*10000)/100}%` },
-						{ name: 'General: ', value: `${correctGeneral}/${answeredGeneral}\t${Math.round((correctGeneral/answeredGeneral)*10000)/100}%` },
-						{ name: 'Extra: ', value: `${correctExtra}/${answeredExtra}\t${Math.round((correctExtra/answeredExtra)*10000)/100}%` },
+						{ name: 'Technician: ', value: `${guildTechCorrect}/${guildTechAnswered}\t${Math.round((guildTechCorrect/guildTechAnswered)*10000)/100}%` },
+						{ name: 'General: ', value: `${guildGeneralCorrect}/${guildGeneralAnswered}\t${Math.round((guildGeneralCorrect/guildGeneralAnswered)*10000)/100}%` },
+						{ name: 'Extra: ', value: `${guildExtraCorrect}/${guildExtraAnswered}\t${Math.round((guildExtraCorrect/guildExtraAnswered)*10000)/100}%` },
 					)
 					.setTimestamp()
 				await interaction.followUp({ embeds: [embed] });
-			} catch(error) {
-				signale.error(error);
+			} else {
+				signale.debug("Command for stats run in DM");
+				interaction.followUp("Stats command must be run in a server.");
 			}
+			// await interaction.followUp({ embeds: [embed] });
+		} catch(error) {
+			signale.error(error);
 		}
 	},
 };

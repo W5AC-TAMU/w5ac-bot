@@ -1,7 +1,9 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, Events, AttachmentBuilder, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const CronJob = require('cron').CronJob;
 const fs = require('node:fs');
 const signale = require('signale');
+const mongoose = require('mongoose');
+const { Config, Exam, Question} = require('../schema')
 
 signale.config({displayTimestamp: true, displayDate: true});
 
@@ -9,373 +11,350 @@ signale.config({displayTimestamp: true, displayDate: true});
 // Posts daily license questions in channel configured by config file and updates answer file based on button reactions
 
 module.exports = {
-	configFile: null,
 	client: null,
-	init: function(client, config) {
+	init: function(client) {
 		this.client = client;
-		this.configFile = config;
+		mongoose.connect('mongodb://127.0.0.1:27017/w5ac-bot');
 		this.questions();
-		this.updateCorrect();
 	},
 	// Post questions
 	questions: async function() {
-		// Load exam channel and exam pools from file
-		let channel = this.client.channels.cache.find(ch => ch.name === this.configFile.exam_chan);
-		var poolT = JSON.parse(fs.readFileSync('./resources/exams/technician.json', 'utf8'));
-		var poolG = JSON.parse(fs.readFileSync('./resources/exams/general.json', 'utf8'));
-		var poolE = JSON.parse(fs.readFileSync('./resources/exams/extra.json', 'utf8'));
-		
-		// Every day at 6 and 18 hours, run the function
-		const job = new CronJob('0 0 6,18 * * *', async function() {
-			// Close old questions and post answers. If no previous questions exist, fail gracefully
+		const schedule = new CronJob('0 * * * * *', async function() {
 			try {
-				// Find old messages from data storage file
-				var questions = JSON.parse(fs.readFileSync('./resources/exams/questions.json', 'utf8'));
-				let oldT = await channel.messages.fetch(questions[questions.length - 1].idTech);
-				let oldG = await channel.messages.fetch(questions[questions.length - 1].idGeneral);
-				let oldE = await channel.messages.fetch(questions[questions.length - 1].idExtra);
+				// Execute the daily questions for every guild
+				module.exports.client.guilds.cache.forEach(async guild => {
+					// Get guild config
+					Config.findById(guild.id).then(async (config) => {
+						// Don't do exams if exam channel is not defined
+						if(config.channels.daily_question != null) {
+							let channel = module.exports.client.channels.cache.get(config.channels.daily_question);
+							// Find exam record for guild
+							Exam.findById(guild.id).then(async (exam) => {
+								// Handle previous exam for guild
+								if(exam != null) {
+									// If there is a previous question, close it and return the correct answers
+									try {
+										signale.debug(`Handling previous daily questions for guild ${guild.name} <${guild.id}>`);
+										// Find message id of the last exam questions
+										let channel = module.exports.client.channels.cache.get(config.channels.daily_question);
+										let messageT = await channel.messages.fetch(exam.id_tech);
+										let messageG = await channel.messages.fetch(exam.id_general);
+										let messageE = await channel.messages.fetch(exam.id_extra);
 
-				// For each pool, find the question identifier
-				var questionT = '';
-				for(var i = 0; i < oldT.embeds[0].fields.length; i++) {
-					if(oldT.embeds[0].fields[i].name == 'Question') {
-						questionT = oldT.embeds[0].fields[i].value.split(']')[0].split('[')[1];
-					}
-				}
-				var questionG = '';
-				for(var i = 0; i < oldG.embeds[0].fields.length; i++) {
-					if(oldG.embeds[0].fields[i].name == 'Question') {
-						questionG = oldG.embeds[0].fields[i].value.split(']')[0].split('[')[1];
-					}
-				}
-				var questionE = '';
-				for(var i = 0; i < oldE.embeds[0].fields.length; i++) {
-					if(oldE.embeds[0].fields[i].name == 'Question') {
-						questionE = oldE.embeds[0].fields[i].value.split(']')[0].split('[')[1];
-					}
-				}
+										// Get question id from embed
+										var idT = '';
+										for(var i = 0; i < messageT.embeds[0].fields.length; i++) {
+											if(messageT.embeds[0].fields[i].name == 'Question') {
+												idT = messageT.embeds[0].fields[i].value.split(']')[0].split('[')[1];
+												break;
+											}
+										}
+										var idG = '';
+										for(var i = 0; i < messageG.embeds[0].fields.length; i++) {
+											if(messageG.embeds[0].fields[i].name == 'Question') {
+												idG = messageG.embeds[0].fields[i].value.split(']')[0].split('[')[1];
+												break;
+											}
+										}
+										var idE = '';
+										for(var i = 0; i < messageE.embeds[0].fields.length; i++) {
+											if(messageE.embeds[0].fields[i].name == 'Question') {
+												idE = messageE.embeds[0].fields[i].value.split(']')[0].split('[')[1];
+												break;
+											}
+										}
 
-				// For each pool, find the correct answer choice
-				var answerChoices = ['a', 'b', 'c', 'd']
-				var answerCorrectT = '';
-				var answerCorrectG = '';
-				var answerCorrectE = '';
-				for(var i = 0; i < poolT.length; i++) {
-					if(poolT[i].id == questionT) {
-						answerCorrectT = answerChoices[poolT[i].correct];
-					}
-				}
-				for(var i = 0; i < poolG.length; i++) {
-					if(poolG[i].id == questionG) {
-						answerCorrectG = answerChoices[poolG[i].correct];
-					}
-				}
-				for(var i = 0; i < poolE.length; i++) {
-					if(poolE[i].id == questionE) {
-						answerCorrectE = answerChoices[poolE[i].correct];
-					}
-				}
+										// Get FCC question from database and correct letter
+										Question.findById(idT).then((question) => {
+											// Define updated row
+											var rowTU = new ActionRowBuilder()
+											.addComponents(
+												new ButtonBuilder()
+													.setCustomId('daily-exam-tech-a')
+													.setLabel('A')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true),
+												new ButtonBuilder()
+													.setCustomId('daily-exam-tech-b')
+													.setLabel('B')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true),
+												new ButtonBuilder()
+													.setCustomId('daily-exam-tech-c')
+													.setLabel('C')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true),
+												new ButtonBuilder()
+													.setCustomId('daily-exam-tech-d')
+													.setLabel('D')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true)
+											);
+											rowTU.components[question.correct].setStyle(ButtonStyle.Success);
+											messageT.edit({ components: [rowTU] });
+										}).catch((error) => {
+											signale.error(error);
+										});
 
-				// Build new button row with 4 disabled buttons that default to red for incorrect
-				var rowTU = new ActionRowBuilder()
-				.addComponents(
-					new ButtonBuilder()
-						.setCustomId('exam-tech-a')
-						.setLabel('A')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true),
-					new ButtonBuilder()
-						.setCustomId('exam-tech-b')
-						.setLabel('B')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true),
-					new ButtonBuilder()
-						.setCustomId('exam-tech-c')
-						.setLabel('C')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true),
-					new ButtonBuilder()
-						.setCustomId('exam-tech-d')
-						.setLabel('D')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true)
-				);
-				var rowGU = new ActionRowBuilder()
-				.addComponents(
-					new ButtonBuilder()
-						.setCustomId('exam-general-a')
-						.setLabel('A')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true),
-					new ButtonBuilder()
-						.setCustomId('exam-general-b')
-						.setLabel('B')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true),
-					new ButtonBuilder()
-						.setCustomId('exam-general-c')
-						.setLabel('C')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true),
-					new ButtonBuilder()
-						.setCustomId('exam-general-d')
-						.setLabel('D')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true)
-				);
-				var rowEU = new ActionRowBuilder()
-				.addComponents(
-					new ButtonBuilder()
-						.setCustomId('exam-extra-a')
-						.setLabel('A')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true),
-					new ButtonBuilder()
-						.setCustomId('exam-extra-b')
-						.setLabel('B')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true),
-					new ButtonBuilder()
-						.setCustomId('exam-extra-c')
-						.setLabel('C')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true),
-					new ButtonBuilder()
-						.setCustomId('exam-extra-d')
-						.setLabel('D')
-						.setStyle(ButtonStyle.Danger)
-						.setDisabled(true)
-				);
+										Question.findById(idG).then((question) => {
+											// Define updated row
+											var rowGU = new ActionRowBuilder()
+											.addComponents(
+												new ButtonBuilder()
+													.setCustomId('daily-exam-general-a')
+													.setLabel('A')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true),
+												new ButtonBuilder()
+													.setCustomId('daily-exam-general-b')
+													.setLabel('B')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true),
+												new ButtonBuilder()
+													.setCustomId('daily-exam-general-c')
+													.setLabel('C')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true),
+												new ButtonBuilder()
+													.setCustomId('daily-exam-general-d')
+													.setLabel('D')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true)
+											);
+											rowGU.components[question.correct].setStyle(ButtonStyle.Success);
+											messageG.edit({ components: [rowGU] });
+										}).catch((error) => {
+											signale.error(error);
+										});
 
-				// For each pool, set the correct answer to success for green color
-				for(var i = 0; i < rowTU.components.length; i++) {
-					if(rowTU.components[i].data.label.includes(answerCorrectT.toUpperCase())) {
-						rowTU.components[i].setStyle(ButtonStyle.Success);
-					}
-				}
-				for(var i = 0; i < rowGU.components.length; i++) {
-					if(rowGU.components[i].data.label.includes(answerCorrectG.toUpperCase())) {
-						rowGU.components[i].setStyle(ButtonStyle.Success);
-					}
-				}
-				for(var i = 0; i < rowEU.components.length; i++) {
-					if(rowEU.components[i].data.label.includes(answerCorrectE.toUpperCase())) {
-						rowEU.components[i].setStyle(ButtonStyle.Success);
-					}
-				}
+										Question.findById(idE).then((question) => {
+											// Define updated row
+											var rowEU = new ActionRowBuilder()
+											.addComponents(
+												new ButtonBuilder()
+													.setCustomId('daily-exam-extra-a')
+													.setLabel('A')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true),
+												new ButtonBuilder()
+													.setCustomId('daily-exam-extra-b')
+													.setLabel('B')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true),
+												new ButtonBuilder()
+													.setCustomId('daily-exam-extra-c')
+													.setLabel('C')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true),
+												new ButtonBuilder()
+													.setCustomId('daily-exam-extra-d')
+													.setLabel('D')
+													.setStyle(ButtonStyle.Danger)
+													.setDisabled(true)
+											);
+											rowEU.components[question.correct].setStyle(ButtonStyle.Success);
+											messageE.edit({ components: [rowEU] });
+										}).catch((error) => {
+											signale.error(error);
+										});
+									} catch(error) {
+										signale.error(error);
+									}
+								} else {
+									// Create exam if it doesn't exist
+									exam = new Exam({'_id': guild.id, 'question_id': null, 'id_tech': null, 'id_general': null, 'id_extra': null, 'exam_records': []});
+									exam.save();
+									signale.debug(`No previous question for guild ${guild.name} <${guild.id}>`);
+								}
 
-				// Post new button rows
-				oldT.edit({ components: [rowTU] });
-				oldG.edit({ components: [rowGU] });
-				oldE.edit({ components: [rowEU] });
+								// Send new questions
+								signale.debug(`Sending new daily questions for guild ${guild.name} <${guild.id}>`);
+								let sentD = await channel.send({content: `Questions for ${new Date().toLocaleDateString()}`});
+								exam.question_id = sentD.id;
 
-				//TODO: Add message congratulating those who were correct
-				
-				// Update player count of correct answers
-				module.exports.updateCorrect();
-			} catch(error) {
-				signale.error(error);
-			}
-
-			// Send out questions for next round
-			try {
-				channel.send(`Questions for ${new Date().toLocaleDateString()}`);
-				var idTech = '';
-				var idGeneral = '';
-				var idExtra = '';
-				
-				// Pick random questions from pool
-				var randT = Math.floor(Math.random() * poolT.length);
-				var randG = Math.floor(Math.random() * poolG.length);
-				var randE = Math.floor(Math.random() * poolE.length);
+								try {
+									const techPoolQ = Question.find({'_id': {$regex: '^T[0-9][A-F][0-9][0-9]$'}});
+									const poolT = await techPoolQ.exec();
+									var randT = Math.floor(Math.random() * poolT.length)
+									var questionT = poolT.at(randT);
+									
+									var embedT = new EmbedBuilder()
+										.setColor(0x500000)
+										.setTitle('Technician question')
+										.addFields(
+											{ name: 'Question', value: `[${questionT.id}] ${questionT.question}` },
+											{ name: 'Answers', value: `A. ${questionT.answers[0]}\nB. ${questionT.answers[1]}\nC. ${questionT.answers[2]}\nD. ${questionT.answers[3]}`}
+										);
+									const rowT = new ActionRowBuilder()
+										.addComponents(
+											new ButtonBuilder()
+												.setCustomId('daily-exam-tech-a')
+												.setLabel('A')
+												.setStyle(ButtonStyle.Primary),
+											new ButtonBuilder()
+												.setCustomId('daily-exam-tech-b')
+												.setLabel('B')
+												.setStyle(ButtonStyle.Primary),
+											new ButtonBuilder()
+												.setCustomId('daily-exam-tech-c')
+												.setLabel('C')
+												.setStyle(ButtonStyle.Primary),
+											new ButtonBuilder()
+												.setCustomId('daily-exam-tech-d')
+												.setLabel('D')
+												.setStyle(ButtonStyle.Primary),
+										);
+										
+									var filesT = []
+									if(questionT.question.toUpperCase().includes('FIGURE T-1')) {
+										filesT.push(new AttachmentBuilder('./resources/exams/T-1.png'));
+										embedT.setImage('attachment://T-1.png');
+									} else if(questionT.question.toUpperCase().includes('FIGURE T-2')) {
+										filesT.push(new AttachmentBuilder('./resources/exams/T-2.png'));
+										embedT.setImage('attachment://T-2.png');
+									} else if(questionT.question.toUpperCase().includes('FIGURE T-3')) {
+										filesT.push(new AttachmentBuilder('./resources/exams/T-3.png'));
+										embedT.setImage('attachment://T-3.png');
+									}
 			
-				// Technician Pool
-				// Build embed with question and answer choices
-				var embedT = new EmbedBuilder()
-					.setColor(0x500000)
-					.setTitle('Technician question')
-					.addFields(
-						{ name: 'Question', value: `[${poolT[randT].id}] ${poolT[randT].question}` },
-						{ name: 'Answers', value: `A. ${poolT[randT].answers[0]}\nB. ${poolT[randT].answers[1]}\nC. ${poolT[randT].answers[2]}\nD. ${poolT[randT].answers[3]}\n`}
-					)
+									let sentT = await channel.send({embeds: [embedT], files: filesT, components: [rowT]});
+									exam.id_tech = sentT.id;
+								} catch(error) {
+									signale.error(error);
+								}
+			
+								try {
+									const generalPoolQ = Question.find({'_id': {$regex: '^G[0-9][A-F][0-9][0-9]$'}});
+									const poolG = await generalPoolQ.exec();
+									var randG = Math.floor(Math.random() * poolG.length)
+									var questionG = poolG.at(randG);
+									
+									var embedG = new EmbedBuilder()
+										.setColor(0x500000)
+										.setTitle('General question')
+										.addFields(
+											{ name: 'Question', value: `[${questionG.id}] ${questionG.question}` },
+											{ name: 'Answers', value: `A. ${questionG.answers[0]}\nB. ${questionG.answers[1]}\nC. ${questionG.answers[2]}\nD. ${questionG.answers[3]}`}
+										);
+									const rowG = new ActionRowBuilder()
+										.addComponents(
+											new ButtonBuilder()
+												.setCustomId('daily-exam-general-a')
+												.setLabel('A')
+												.setStyle(ButtonStyle.Primary),
+											new ButtonBuilder()
+												.setCustomId('daily-exam-general-b')
+												.setLabel('B')
+												.setStyle(ButtonStyle.Primary),
+											new ButtonBuilder()
+												.setCustomId('daily-exam-general-c')
+												.setLabel('C')
+												.setStyle(ButtonStyle.Primary),
+											new ButtonBuilder()
+												.setCustomId('daily-exam-general-d')
+												.setLabel('D')
+												.setStyle(ButtonStyle.Primary),
+										);
+									
+									var filesG = []
+									if(questionG.question.toUpperCase().includes('FIGURE G7-1')) {
+										filesG.push(new AttachmentBuilder('./resources/exams/G7-1.png'));
+										embedG.setImage('attachment://G7-1.png');
+									}
+			
+									let sentG = await channel.send({embeds: [embedG], files: filesG, components: [rowG]});
+									exam.id_general = sentG.id;
+								} catch(error) {
+									signale.error(error);
+								}
 
-				// Button row for answer choices
-				const rowT = new ActionRowBuilder()
-					.addComponents(
-						new ButtonBuilder()
-							.setCustomId('exam-tech-a')
-							.setLabel('A')
-							.setStyle(ButtonStyle.Primary),
-						new ButtonBuilder()
-							.setCustomId('exam-tech-b')
-							.setLabel('B')
-							.setStyle(ButtonStyle.Primary),
-						new ButtonBuilder()
-							.setCustomId('exam-tech-c')
-							.setLabel('C')
-							.setStyle(ButtonStyle.Primary),
-						new ButtonBuilder()
-							.setCustomId('exam-tech-d')
-							.setLabel('D')
-							.setStyle(ButtonStyle.Primary),
-					);
+								try {
+									const ExtraPoolQ = Question.find({'_id': {$regex: '^E[0-9][A-F][0-9][0-9]$'}});
+									const poolE = await ExtraPoolQ.exec();
+									var randE = Math.floor(Math.random() * poolE.length)
+									var questionE = poolE.at(randE);
+									
+									var embedE = new EmbedBuilder()
+										.setColor(0x500000)
+										.setTitle('Extra question')
+										.addFields(
+											{ name: 'Question', value: `[${questionE.id}] ${questionE.question}` },
+											{ name: 'Answers', value: `A. ${questionE.answers[0]}\nB. ${questionE.answers[1]}\nC. ${questionE.answers[2]}\nD. ${questionE.answers[3]}`}
+										);
+									const rowE = new ActionRowBuilder()
+										.addComponents(
+											new ButtonBuilder()
+												.setCustomId('daily-exam-extra-a')
+												.setLabel('A')
+												.setStyle(ButtonStyle.Primary),
+											new ButtonBuilder()
+												.setCustomId('daily-exam-extra-b')
+												.setLabel('B')
+												.setStyle(ButtonStyle.Primary),
+											new ButtonBuilder()
+												.setCustomId('daily-exam-extra-c')
+												.setLabel('C')
+												.setStyle(ButtonStyle.Primary),
+											new ButtonBuilder()
+												.setCustomId('daily-exam-extra-d')
+												.setLabel('D')
+												.setStyle(ButtonStyle.Primary),
+										);
+									
+									var filesE = []
+									if(questionE.question.toUpperCase().includes('FIGURE E5-1')) {
+										filesE.push(new AttachmentBuilder('./resources/exams/E5-1.png'));
+										embedE.setImage('attachment://E5-1.png');
+									} else if(questionE.question.toUpperCase().includes('FIGURE E6-1')) {
+										filesE.push(new AttachmentBuilder('./resources/exams/E6-1.png'));
+										embedE.setImage('attachment://E6-1.png');
+									} else if(questionE.question.toUpperCase().includes('FIGURE E6-2')) {
+										filesE.push(new AttachmentBuilder('./resources/exams/E6-2.png'));
+										embedE.setImage('attachment://E6-2.png');
+									} else if(questionE.question.toUpperCase().includes('FIGURE E6-3')) {
+										filesE.push(new AttachmentBuilder('./resources/exams/E6-3.png'));
+										embedE.setImage('attachment://E6-3.png');
+									} else if(questionE.question.toUpperCase().includes('FIGURE E7-1')) {
+										filesE.push(new AttachmentBuilder('./resources/exams/E7-1.png'));
+										embedE.setImage('attachment://E7-1.png');
+									} else if(questionE.question.toUpperCase().includes('FIGURE E7-2')) {
+										filesE.push(new AttachmentBuilder('./resources/exams/E7-2.png'));
+										embedE.setImage('attachment://E7-2.png');
+									} else if(questionE.question.toUpperCase().includes('FIGURE E7-3')) {
+										filesE.push(new AttachmentBuilder('./resources/exams/E7-3.png'));
+										embedE.setImage('attachment://E7-3.png');
+									} else if(questionE.question.toUpperCase().includes('FIGURE E9-1')) {
+										filesE.push(new AttachmentBuilder('./resources/exams/E9-1.png'));
+										embedE.setImage('attachment://E9-1.png');
+									} else if(questionE.question.toUpperCase().includes('FIGURE E9-2')) {
+										filesE.push(new AttachmentBuilder('./resources/exams/E9-2.png'));
+										embedE.setImage('attachment://E9-2.png');
+									} else if(questionE.question.toUpperCase().includes('FIGURE E9-3')) {
+										filesE.push(new AttachmentBuilder('./resources/exams/E9-3.png'));
+										embedE.setImage('attachment://E9-3.png');
+									}
+			
+									let sentE = await channel.send({embeds: [embedE], files: filesE, components: [rowE]});
+									exam.id_extra = sentE.id;
+								} catch(error) {
+									signale.error(error);
+								}
 
-				// If question has figure attached, add to embed and send. If no figure, send out message
-				if(poolT[randT].question.toUpperCase().includes('FIGURE T-1')) {
-					const file = new AttachmentBuilder('./resources/exams/T-1.png');
-					embedT.setImage('attachment://T-1.png');
-					let sent = await channel.send({ embeds: [embedT], files: [file], components: [rowT] });
-					idTech = sent.id;
-				} else if(poolT[randT].question.toUpperCase().includes('FIGURE T-2')) {
-					const file = new AttachmentBuilder('./resources/exams/T-2.png');
-					embedT.setImage('attachment://T-2.png');
-					let sent = await channel.send({ embeds: [embedT], files: [file], components: [rowT] });
-					idTech = sent.id;
-				} else if(poolT[randT].question.toUpperCase().includes('FIGURE T-3')) {
-					const file = new AttachmentBuilder('./resources/exams/T-3.png');
-					embedT.setImage('attachment://T-3.png');
-					let sent = await channel.send({ embeds: [embedT], files: [file], components: [rowT] });
-					idTech = sent.id;
-				} else {
-					let sent = await channel.send({ embeds: [embedT], components: [rowT] });
-					idTech = sent.id;
-				}
-
-				// General Pool
-				// Build embed with question and answer choices
-				var embedG = new EmbedBuilder()
-					.setColor(0x500000)
-					.setTitle('General question')
-					.addFields(
-						{ name: 'Question', value: `[${poolG[randG].id}] ${poolG[randG].question}` },
-						{ name: 'Answers', value: `A. ${poolG[randG].answers[0]}\nB. ${poolG[randG].answers[1]}\nC. ${poolG[randG].answers[2]}\nD. ${poolG[randG].answers[3]}\n`}
-					)
-
-				// Button row for answer choices
-				const rowG = new ActionRowBuilder()
-					.addComponents(
-						new ButtonBuilder()
-							.setCustomId('exam-general-a')
-							.setLabel('A')
-							.setStyle(ButtonStyle.Primary),
-						new ButtonBuilder()
-							.setCustomId('exam-general-b')
-							.setLabel('B')
-							.setStyle(ButtonStyle.Primary),
-						new ButtonBuilder()
-							.setCustomId('exam-general-c')
-							.setLabel('C')
-							.setStyle(ButtonStyle.Primary),
-						new ButtonBuilder()
-							.setCustomId('exam-general-d')
-							.setLabel('D')
-							.setStyle(ButtonStyle.Primary),
-					);
-				
-				// If question has figure attached, add to embed and send. If no figure, send out message
-				if(poolG[randG].question.toUpperCase().includes('FIGURE G7-1')) {
-					const file = new AttachmentBuilder('./resources/exams/G7-1.png');
-					embedG.setImage('attachment://G7-1.png');
-					let sent = await channel.send({ embeds: [embedG], files: [file], components: [rowG] });
-					idGeneral = sent.id;
-				} else {
-					let sent = await channel.send({ embeds: [embedG], components: [rowG] });
-					idGeneral = sent.id;
-				}
-
-				// Extra Pool
-				// Build embed with question and answer choices
-				var embedE = new EmbedBuilder()
-					.setColor(0x500000)
-					.setTitle('Extra question')
-					.addFields(
-						{ name: 'Question', value: `[${poolE[randE].id}] ${poolE[randE].question}` },
-						{ name: 'Answers', value: `A. ${poolE[randE].answers[0]}\nB. ${poolE[randE].answers[1]}\nC. ${poolE[randE].answers[2]}\nD. ${poolE[randE].answers[3]}\n`}
-					)
-
-				// Button row for answer choices
-				const rowE = new ActionRowBuilder()
-					.addComponents(
-						new ButtonBuilder()
-							.setCustomId('exam-extra-a')
-							.setLabel('A')
-							.setStyle(ButtonStyle.Primary),
-						new ButtonBuilder()
-							.setCustomId('exam-extra-b')
-							.setLabel('B')
-							.setStyle(ButtonStyle.Primary),
-						new ButtonBuilder()
-							.setCustomId('exam-extra-c')
-							.setLabel('C')
-							.setStyle(ButtonStyle.Primary),
-						new ButtonBuilder()
-							.setCustomId('exam-extra-d')
-							.setLabel('D')
-							.setStyle(ButtonStyle.Primary),
-					);
-
-				// If question has figure attached, add to embed and send. If no figure, send out message
-				if(poolE[randE].question.toUpperCase().includes('FIGURE E5-1')) {
-					const file = new AttachmentBuilder('./resources/exams/E5-1.png');
-					embedE.setImage('attachment://E5-1.png');
-					let sent = await channel.send({ embeds: [embedE], files: [file], components: [rowE] });
-					idExtra = sent.id;
-				} else if(poolE[randE].question.toUpperCase().includes('FIGURE E6-1')) {
-					const file = new AttachmentBuilder('./resources/exams/E6-1.png');
-					embedE.setImage('attachment://E6-1.png');
-					let sent = await channel.send({ embeds: [embedE], files: [file], components: [rowE] });
-					idExtra = sent.id;
-				} else if(poolE[randE].question.toUpperCase().includes('FIGURE E6-2')) {
-					const file = new AttachmentBuilder('./resources/exams/E6-2.png');
-					embedE.setImage('attachment://E6-2.png');
-					let sent = await channel.send({ embeds: [embedE], files: [file], components: [rowE] });
-					idExtra = sent.id;
-				} else if(poolE[randE].question.toUpperCase().includes('FIGURE E6-3')) {
-					const file = new AttachmentBuilder('./resources/exams/E6-3.png');
-					embedE.setImage('attachment://E6-3.png');
-					let sent = await channel.send({ embeds: [embedE], files: [file], components: [rowE] });
-					idExtra = sent.id;
-				} else if(poolE[randE].question.toUpperCase().includes('FIGURE E7-1')) {
-					const file = new AttachmentBuilder('./resources/exams/E7-1.png');
-					embedE.setImage('attachment://E7-1.png');
-					let sent = await channel.send({ embeds: [embedE], files: [file], components: [rowE] });
-					idExtra = sent.id;
-				} else if(poolE[randE].question.toUpperCase().includes('FIGURE E7-2')) {
-					const file = new AttachmentBuilder('./resources/exams/E7-2.png');
-					embedE.setImage('attachment://E7-2.png');
-					let sent = await channel.send({ embeds: [embedE], files: [file], components: [rowE] });
-					idExtra = sent.id;
-				} else if(poolE[randE].question.toUpperCase().includes('FIGURE E7-3')) {
-					const file = new AttachmentBuilder('./resources/exams/E7-3.png');
-					embedE.setImage('attachment://E7-3.png');
-					let sent = await channel.send({ embeds: [embedE], files: [file], components: [rowE] });
-					idExtra = sent.id;
-				} else if(poolE[randE].question.toUpperCase().includes('FIGURE E9-1')) {
-					const file = new AttachmentBuilder('./resources/exams/E9-1.png');
-					embedE.setImage('attachment://E9-1.png');
-					let sent = await channel.send({ embeds: [embedE], files: [file], components: [rowE] });
-					idExtra = sent.id;
-				} else if(poolE[randE].question.toUpperCase().includes('FIGURE E9-2')) {
-					const file = new AttachmentBuilder('./resources/exams/E9-2.png');
-					embedE.setImage('attachment://E9-2.png');
-					let sent = await channel.send({ embeds: [embedE], files: [file], components: [rowE] });
-					idExtra = sent.id;
-				} else if(poolE[randE].question.toUpperCase().includes('FIGURE E9-3')) {
-					const file = new AttachmentBuilder('./resources/exams/E9-3.png');
-					embedE.setImage('attachment://E9-3.png');
-					let sent = await channel.send({ embeds: [embedE], files: [file], components: [rowE] });
-					idExtra = sent.id;
-				} else {
-					let sent = await channel.send({ embeds: [embedE], components: [rowE] });
-					idExtra = sent.id;
-				}
-
-				// Add current question id to storage to be able to fetch id to close the question
-				const today = new Date().toISOString().slice(0, 10)
-				questions.push({'date': today, 'idTech': idTech, 'idGeneral': idGeneral, 'idExtra': idExtra})
-				fs.writeFile('./resources/exams/questions.json', JSON.stringify(questions, null, 2), function writeJSON(err) {
-					if (err) return console.log(err);
-					JSON.stringify(questions, null, 2);
+								// Save changes to previous question
+								exam.save();
+							}).catch((error) => {
+								signale.error(error);
+							});
+						}
+					}).catch((error) => {
+						try {
+							var newGuild = new Config({'_id': guild.id, 'channels': {'logs': null, 'role': null, 'daily_question': null, 'audio_stream': null}, 'audio_stream_url': null});
+							newGuild.save();
+						} catch(error) {
+							signale.error(error);
+						}
+						signale.error(error);
+					});
 				});
 			} catch(error) {
 				signale.error(error);
@@ -383,125 +362,62 @@ module.exports = {
 		});
 
 		// Start scheduled script
-		job.start();
+		schedule.start();
 	},
 
 	// Handle button press answers
-	answers: function(interaction) {
-		// Load records and get today's date
-		var poolT = JSON.parse(fs.readFileSync('./resources/exams/technician.json', 'utf8'));
-		var poolG = JSON.parse(fs.readFileSync('./resources/exams/general.json', 'utf8'));
-		var poolE = JSON.parse(fs.readFileSync('./resources/exams/extra.json', 'utf8'));
-		var answers = JSON.parse(fs.readFileSync('./resources/exams/answers.json', 'utf8'));
-		const today = new Date().toISOString().slice(0, 10)
+	answers: async function(interaction) {
+		try {
+			await interaction.deferReply({ ephemeral: true });
 
-		// Get button press information
-		var user = interaction.user.id;
-		var name = interaction.guild.members.cache.find(member => member.id === interaction.user.id).displayName;
-		var pool = interaction.customId.split('-')[1];
-		var answer = interaction.customId.split('-')[2];
+			var interactionGuild = await Exam.find({'_id': interaction.guild.id, 'exam_records._id': interaction.user.id}).exec();
+			if(interactionGuild.length != 0) {
+				// Handle player with previous answers
+				const answerIndex = ['a', 'b', 'c', 'd'].indexOf(interaction.customId.split('-')[3]);
 
-		// Find question the button was pressed on
-		var fields = interaction.message.embeds[0].fields;
-		var question = '';
-		for(var i = 0; i < fields.length; i++) {
-			if(fields[i].name == 'Question') {
-				question = fields[i].value.split(']')[0].split('[')[1];
-			}
-		}
-
-		// Find the correct answer choice
-		var answerChoices = ['a', 'b', 'c', 'd']
-		var answerCorrect = '';
-		if(question[0] == 'T') {
-			for(var i = 0; i < poolT.length; i++) {
-				if(poolT[i].id == question) {
-					answerCorrect = answerChoices[poolT[i].correct];
-				}
-			}
-		} else if(question[0] == 'G') {
-			for(var i = 0; i < poolG.length; i++) {
-				if(poolG[i].id == question) {
-					answerCorrect = answerChoices[poolG[i].correct];
-				}
-			}
-		} else if(question[0] == 'E') {
-			for(var i = 0; i < poolE.length; i++) {
-				if(poolE[i].id == question) {
-					answerCorrect = answerChoices[poolE[i].correct];
-				}
-			}
-		} else {
-			signale.debug(`Unknown question [${question}] answered`);
-		}
-
-		// Find user if they have answered in the past
-		var index = -1;
-		for(var i = 0; i < answers.length; i++) {
-			if(answers[i].id == user) {
-				index = i;
-				break;
-			}
-		}
-
-		if(index != -1) {
-			// If they have answered in the past, update username if it was unknown
-			if(answers[i].nickname != name) {
-				answers[i].nickname = name;
-			}
-
-			// Find answer for today if it exists and modify, otherwise add new answer record
-			var answerList = answers[i].answers;
-			var prevAnswered = false;
-			for(var i = 0; i < answerList.length; i++) {
-				if(answerList[i].date === today && answerList[i].pool == pool && answerList[i].question == question) {
-					if(answerList[i].answer != answer) {
-						answerList[i].answer = answer;
+				// Get question id from embed
+				let questionID = '';
+				for(var i = 0; i < interaction.message.embeds[0].fields.length; i++) {
+					if(interaction.message.embeds[0].fields[i].name == 'Question') {
+						questionID = interaction.message.embeds[0].fields[i].value.split(']')[0].split('[')[1];
+						break;
 					}
-					prevAnswered = true;
 				}
-			}
-			if(!prevAnswered) {
-				answerList.push({'date': today, 'pool': pool, 'question': question, 'answerCorrect': answerCorrect, 'answer': answer})
-			}
-		} else {
-			// If never answered, add new player
-			answers.push({'id': user, 'nickname': name, 'correct': 0, 'answered': 0, 'answers': [{'date': today, 'pool': pool, 'question': question, 'answerCorrect': answerCorrect, 'answer': answer}]})
-		}
+				const question = await Question.findById(questionID).exec();
 
-		// Write changes to answer storage
-		fs.writeFile('./resources/exams/answers.json', JSON.stringify(answers, null, 2), function writeJSON(err) {
-			if (err) return console.log(err);
-			JSON.stringify(answers, null, 2);
-		});
-		
-		// Update player with confirmation message
-		interaction.reply({ content: `Answer ${answer.toUpperCase()} recorded for question [${question}]`, ephemeral: true })
-	},
-
-	// Update number of correct answers for each player
-	updateCorrect: async function() {
-		// Load answer file
-		var answers = JSON.parse(fs.readFileSync('./resources/exams/answers.json', 'utf8'));
-
-		// For each player, tally number of correct answers and modify attribute
-		for(var i = 0; i < answers.length; i++) {
-			var correct = 0;
-			for(var j = 0; j < answers[i].answers.length; j++) {
-				if(answers[i].answers[j].answer == answers[i].answers[j].answerCorrect) {
-					correct++;
+				var playerRecord = interactionGuild[0].exam_records.id(interaction.user.id);
+				var playerAnswer = playerRecord.answers.id(interaction.message.id);
+				if(playerAnswer != null) {
+					playerAnswer.answer = answerIndex;
+					playerAnswer.correct = answerIndex == question.correct;
+				} else {
+					playerRecord.answers.push({'_id': interaction.message.id, 'question': questionID, 'answer': answerIndex, 'correct': answerIndex == question.correct})
 				}
-			}
-			answers[i].answered = answers[i].answers.length;
-			answers[i].correct = correct;
-		}
+				interactionGuild[0].markModified('exam_records');
+				interactionGuild[0].save();
+				await interaction.followUp({ content: `Answer ${['A', 'B', 'C', 'D'].at(answerIndex)} recorded for question [${questionID}]`, ephemeral: true });
+			} else {
+				// New player
+				const answerIndex = ['a', 'b', 'c', 'd'].indexOf(interaction.customId.split('-')[3]);
 
-		// Write changes to answer file
-		fs.writeFile('./resources/exams/answers.json', JSON.stringify(answers, null, 2), function writeJSON(error) {
-			if(error) {
-				signale.error(error);
+				// Get question id from embed
+				let questionID = '';
+				for(var i = 0; i < interaction.message.embeds[0].fields.length; i++) {
+					if(interaction.message.embeds[0].fields[i].name == 'Question') {
+						questionID = interaction.message.embeds[0].fields[i].value.split(']')[0].split('[')[1];
+						break;
+					}
+				}
+				const question = await Question.findById(questionID).exec();
+
+				const guild = await Exam.findById(interaction.guild.id).exec();
+				guild.exam_records.push({'_id': interaction.user.id, 'answers': [{'_id': interaction.message.id, 'question': questionID, 'answer': answerIndex, 'correct': answerIndex == question.correct}]})
+				guild.save();
+				await interaction.followUp({ content: `Answer ${['A', 'B', 'C', 'D'].at(answerIndex)} recorded for question [${questionID}]`, ephemeral: true });
 			}
-			JSON.stringify(answers, null, 2);
-		});
+		} catch(error) {
+			signale.error(error);
+			await interaction.followUp({ content: 'There was an error recording your answer. Please try again later.', ephemeral: true });
+		}
 	}
-   };
+};

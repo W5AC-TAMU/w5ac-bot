@@ -21,7 +21,6 @@ try {
 // Discord client
 const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers]});
 
-
 // Load Discord commands from .js files in commands directory
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
@@ -40,7 +39,7 @@ for (const file of commandFiles) {
 // Run when bot is logged in
 client.on('ready', () => {
 	signale.success(`Logged in as ${client.user.tag}`)
-	examQuestion.init(client, configFile);
+	examQuestion.init(client);
 	roles.init(client, configFile);
 });
 
@@ -55,8 +54,9 @@ client.on(Events.InteractionCreate, async interaction => {
 			return;
 		}
 		try {
+			var id = interaction.user.id;
 			var user = interaction.guild != null ? interaction.guild.members.cache.find(member => member.id === interaction.user.id).displayName : interaction.user.username;
-			signale.debug(`Command ${interaction.commandName} by user ${user}`);
+			signale.debug(`Command ${interaction.commandName} by user ${user} <${id}>`);
 			await command.execute(interaction);
 		} catch(error) {
 			signale.error(error);
@@ -64,7 +64,9 @@ client.on(Events.InteractionCreate, async interaction => {
 		}
 		// If button press, check for errors, then run corresponding handler
 	} else if(interaction.isButton()) {
-		signale.debug(`Button ${interaction.customId} pressed by user ${interaction.guild.members.cache.find(member => member.id === interaction.user.id).displayName}`);
+		var id = interaction.user.id;
+		var user = interaction.guild != null ? interaction.guild.members.cache.find(member => member.id === interaction.user.id).displayName : interaction.user.username;
+		signale.debug(`Button ${interaction.customId} pressed by user ${user} <${id}>`);
 		try {
 			if(interaction.customId.includes('exam')) {
 				examQuestion.answers(interaction);
@@ -79,7 +81,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
 // Runs when a user is added to a server
 client.on('guildMemberAdd', async member => {
-	signale.debug(`${member.user.username} joined a server the bot is in.`);
+	signale.debug(`${member.user.displayName}#${member.user.discriminator} <${member.user.id}> joined a server the bot is in.`);
 	try {
 		let mod_embed = new EmbedBuilder()
 			.setColor(0x5B6236)
@@ -99,22 +101,9 @@ client.on('guildMemberAdd', async member => {
 
 // Runs when messages are deleted
 client.on('messageDelete', async message => {
-	signale.debug(`Message by ${message.guild.members.cache.find(member => member.id === message.author.id).displayName} deleted in #${message.channel.name}`);
-	try {
-		if (message.author.bot) return;
-		if (message.content === '') return;
-		let channel = client.channels.cache.find(ch => ch.name === configFile.log_chan);
-		const embed = new EmbedBuilder()
-			.setColor(0xFF0000)
-			.setTitle(`:wastebasket: Message Delete in #${message.channel.name}`)
-			.setAuthor({name: message.author.username})
-			.setDescription(`Deleted on ${new Date().toString()}`)
-			.addFields({name: 'Message content', value: `\`\`\`${message.content}\`\`\``});
-		channel.send({embeds: [embed]});
-	} catch(error) {
-		signale.error(error);
-	}
-	signale.debug(`Message by ${message.guild.members.cache.find(member => member.id === message.author.id).displayName} deleted in #${message.channel.name}`);
+	var id = interaction.user.id;
+	var user = interaction.guild != null ? interaction.guild.members.cache.find(member => member.id === interaction.user.id).displayName : interaction.user.username;
+	signale.debug(`Message by ${user} <${id}> deleted in #${message.channel.name}`);
 	try {
 		if (message.author.bot) return;
 		if (message.content === '') return;
