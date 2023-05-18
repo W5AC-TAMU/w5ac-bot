@@ -18,12 +18,17 @@ module.exports = {
 			.setDescription('The user to find stats for')),
 	async execute(interaction) {
 		try {
-			await interaction.deferReply({ ephemeral: true });
+			await interaction.deferReply();
 			mongoose.connect('mongodb://127.0.0.1:27017/w5ac-bot');
+			var userId = interaction.options?.getUser('user')?.id ?? interaction.user.id;
 			if(interaction.guild != null) {
 				var guildRecord = await Exam.findById(interaction.guild.id).exec();
-				var guildPlayerRecord = guildRecord.exam_records.id(interaction.user.id).answers;
-				var guildPlayerRecordOld = guildRecord.exam_records.id(interaction.user.id).record_old;
+				if(guildRecord.exam_records.id(userId) == null) {
+					interaction.followUp(`<@${userId}> has not answered any questions.`);
+					return;
+				}
+				var guildPlayerRecord = guildRecord.exam_records.id(userId).answers;
+				var guildPlayerRecordOld = guildRecord.exam_records.id(userId).record_old;
 
 				let guildTechCorrect = 0;
 				let guildTechAnswered = 0;
@@ -31,6 +36,11 @@ module.exports = {
 				let guildGeneralAnswered = 0;
 				let guildExtraCorrect = 0;
 				let guildExtraAnswered = 0;
+
+				if(guildPlayerRecord.length == 0) {
+					interaction.followUp(`<@${userId}> has not answered any questions.`);
+					return;
+				}
 
 				for(var i = 0; i < guildPlayerRecord.length; i++) {
 					switch(guildPlayerRecord[i].question[0]) {
@@ -74,7 +84,7 @@ module.exports = {
 
 				const embed = new EmbedBuilder()
 					.setColor(0x500000)
-					.setTitle(`Statistics for ${interaction.guild.members.cache.find(member => member.id === interaction.user.id).displayName}`)
+					.setTitle(`Statistics for ${interaction.guild.members.cache.find(member => member.id === userId).displayName}`)
 					.setDescription(`Total: ${totalCorrect}/${totalAnswered}\t${Math.round((totalCorrect/totalAnswered)*10000)/100}%`)
 					.addFields(
 						{ name: 'Technician: ', value: `${guildTechCorrect}/${guildTechAnswered}\t${Math.round((guildTechCorrect/guildTechAnswered)*10000)/100}%` },

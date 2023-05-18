@@ -19,7 +19,7 @@ module.exports = {
 	},
 	// Post questions
 	questions: async function() {
-		const schedule = new CronJob('0 */5 * * * *', async function() {
+		const schedule = new CronJob('0 * * * * *', async function() {
 			try {
 				// Execute the daily questions for every guild
 				module.exports.client.guilds.cache.forEach(async guild => {
